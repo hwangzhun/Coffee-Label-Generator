@@ -1,0 +1,185 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const cors = require('cors');
+
+const app = express();
+const PORT = 3000;
+
+// 中间件
+app.use(cors());
+app.use(express.json());
+app.use(express.static('.'));
+
+// 确保log文件夹存在
+const logDir = path.join(__dirname, 'log');
+if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+}
+
+// 确保img文件夹存在
+const imgDir = path.join(__dirname, 'img');
+if (!fs.existsSync(imgDir)) {
+    fs.mkdirSync(imgDir, { recursive: true });
+}
+
+// 保存log文件的API
+app.post('/api/save-log', (req, res) => {
+    try {
+        const { filename, content, logData } = req.body;
+        
+        // 验证数据
+        if (!filename || !content) {
+            return res.status(400).json({ 
+                success: false, 
+                message: '缺少必要参数' 
+            });
+        }
+        
+        // 确保文件名安全
+        const safeFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const logFilePath = path.join(logDir, safeFilename);
+        
+        // 写入文件
+        fs.writeFileSync(logFilePath, content, 'utf8');
+        
+        // 记录服务器日志
+        console.log(`Log文件已保存: ${safeFilename}`);
+        console.log(`文件路径: ${logFilePath}`);
+        console.log(`文件大小: ${content.length} 字符`);
+        
+        // 返回成功响应
+        res.json({
+            success: true,
+            message: 'Log文件保存成功',
+            filename: safeFilename,
+            path: logFilePath,
+            size: content.length
+        });
+        
+    } catch (error) {
+        console.error('保存log文件时出错:', error);
+        res.status(500).json({
+            success: false,
+            message: '服务器内部错误',
+            error: error.message
+        });
+    }
+});
+
+// 获取log文件列表的API
+app.get('/api/logs', (req, res) => {
+    try {
+        const files = fs.readdirSync(logDir)
+            .filter(file => file.endsWith('.log'))
+            .map(file => {
+                const filePath = path.join(logDir, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    filename: file,
+                    size: stats.size,
+                    created: stats.birthtime,
+                    modified: stats.mtime
+                };
+            })
+            .sort((a, b) => b.modified - a.modified); // 按修改时间倒序
+        
+        res.json({
+            success: true,
+            logs: files
+        });
+        
+    } catch (error) {
+        console.error('获取log文件列表时出错:', error);
+        res.status(500).json({
+            success: false,
+            message: '获取log文件列表失败',
+            error: error.message
+        });
+    }
+});
+
+// 下载log文件的API
+app.get('/api/logs/:filename', (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const safeFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+        const logFilePath = path.join(logDir, safeFilename);
+        
+        if (!fs.existsSync(logFilePath)) {
+            return res.status(404).json({
+                success: false,
+                message: 'Log文件不存在'
+            });
+        }
+        
+        res.download(logFilePath, safeFilename);
+        
+    } catch (error) {
+        console.error('下载log文件时出错:', error);
+        res.status(500).json({
+            success: false,
+            message: '下载log文件失败',
+            error: error.message
+        });
+    }
+});
+
+// 获取图片文件列表的API
+app.get('/api/images', (req, res) => {
+    try {
+        // 支持的图片格式
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+        
+        // 读取img文件夹中的所有文件
+        const files = fs.readdirSync(imgDir)
+            .filter(file => {
+                const ext = path.extname(file).toLowerCase();
+                return imageExtensions.includes(ext);
+            })
+            .map(file => {
+                const filePath = path.join(imgDir, file);
+                const stats = fs.statSync(filePath);
+                return {
+                    filename: file,
+                    size: stats.size,
+                    created: stats.birthtime,
+                    modified: stats.mtime
+                };
+            })
+            .sort((a, b) => {
+                // 按文件名排序，数字文件名会正确排序
+                return a.filename.localeCompare(b.filename, undefined, { numeric: true });
+            });
+        
+        // 只返回文件名数组
+        const filenames = files.map(file => file.filename);
+        
+        console.log(`找到 ${filenames.length} 个图片文件:`, filenames);
+        
+        res.json(filenames);
+        
+    } catch (error) {
+        console.error('获取图片文件列表时出错:', error);
+        res.status(500).json({
+            success: false,
+            message: '获取图片文件列表失败',
+            error: error.message
+        });
+    }
+});
+
+// 启动服务器
+app.listen(PORT, () => {
+    console.log(`咖啡名片编辑器服务器已启动`);
+    console.log(`访问地址: http://localhost:${PORT}`);
+    console.log(`Log文件夹: ${logDir}`);
+    console.log(`图片文件夹: ${imgDir}`);
+    console.log('='.repeat(50));
+});
+
+// 优雅关闭
+process.on('SIGINT', () => {
+    console.log('\n正在关闭服务器...');
+    process.exit(0);
+});
