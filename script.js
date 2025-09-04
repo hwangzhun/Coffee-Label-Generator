@@ -193,9 +193,9 @@ class PaginatedCoffeeCardEditor {
             }
             
             item.innerHTML = `
-                <img src="${image.data}" alt="${image.name}">
+                <img src="${image.data}" alt="${this.getDisplayName(image.name)}">
                 <div class="individual-image-info">
-                    <div class="image-name">${image.name}</div>
+                    <div class="image-name">${this.getDisplayName(image.name)}</div>
                     <div class="image-size">数量: ${selection.quantity} 张</div>
                 </div>
                 <div class="individual-copies-container">
@@ -238,14 +238,19 @@ class PaginatedCoffeeCardEditor {
     }
 
     async loadAvailableImages() {
-        const imageFiles = [
-            '1.jpg', '2.jpg', '3.jpg', '4.jpg', 
-            '5.jpg', '6.jpg', '7.jpg', '8.jpg'
-        ];
-        
-        this.imageGrid.innerHTML = '<p class="loading-text">正在加载图片...</p>';
+        this.imageGrid.innerHTML = '<p class="loading-text">正在扫描图片文件...</p>';
         
         try {
+            // 首先获取图片文件列表
+            const imageFiles = await this.getImageFileList();
+            
+            if (imageFiles.length === 0) {
+                this.imageGrid.innerHTML = '<p class="loading-text">img文件夹中没有找到图片文件</p>';
+                return;
+            }
+            
+            this.imageGrid.innerHTML = '<p class="loading-text">正在加载图片...</p>';
+            
             const loadPromises = imageFiles.map(async (filename) => {
                 try {
                     const imageUrl = `img/${filename}`;
@@ -274,6 +279,40 @@ class PaginatedCoffeeCardEditor {
             console.error('加载图片时出错：', error);
             this.imageGrid.innerHTML = '<p class="loading-text">图片加载失败，请检查img文件夹</p>';
         }
+    }
+
+    async getImageFileList() {
+        try {
+            // 尝试从服务器获取图片文件列表
+            const response = await fetch('/api/images');
+            if (response.ok) {
+                const files = await response.json();
+                return files.filter(file => this.isImageFile(file));
+            }
+        } catch (error) {
+            console.log('无法从服务器获取文件列表，使用默认列表');
+        }
+        
+        // 如果服务器方法失败，使用预定义列表作为后备
+        return [
+            '1.jpg', '2.jpg', '3.jpg', '4.jpg', 
+            '5.jpg', '6.jpg', '7.jpg', '8.jpg'
+        ];
+    }
+
+    isImageFile(filename) {
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
+        const lowerFilename = filename.toLowerCase();
+        return imageExtensions.some(ext => lowerFilename.endsWith(ext));
+    }
+
+    getDisplayName(filename) {
+        // 移除文件扩展名，只显示文件名主体
+        const lastDotIndex = filename.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            return filename.substring(0, lastDotIndex);
+        }
+        return filename;
     }
 
     loadImageFromUrl(url) {
@@ -311,15 +350,15 @@ class PaginatedCoffeeCardEditor {
             if (image.loaded) {
                 imageItem.innerHTML = `
                     <div class="checkbox">✓</div>
-                    <img src="${image.data}" alt="${image.name}">
-                    <div class="image-name">${image.name}</div>
+                    <img src="${image.data}" alt="${this.getDisplayName(image.name)}">
+                    <div class="image-name">${this.getDisplayName(image.name)}</div>
                 `;
                 
                 imageItem.addEventListener('click', () => this.toggleImageSelection(index));
             } else {
                 imageItem.innerHTML = `
                     <div class="image-name" style="padding: 40px; color: #ef4444;">
-                        ${image.name}<br>
+                        ${this.getDisplayName(image.name)}<br>
                         <small>加载失败</small>
                     </div>
                 `;
@@ -400,9 +439,9 @@ class PaginatedCoffeeCardEditor {
             const item = document.createElement('div');
             item.className = 'image-quantity-item';
             item.innerHTML = `
-                <img src="${image.data}" alt="${image.name}">
+                <img src="${image.data}" alt="${this.getDisplayName(image.name)}">
                 <div class="image-quantity-info">
-                    <div class="image-name">${image.name}</div>
+                    <div class="image-name">${this.getDisplayName(image.name)}</div>
                     <div class="image-size">${image.data ? '已加载' : '加载失败'}</div>
                 </div>
                 <div class="quantity-controls">
@@ -558,16 +597,16 @@ class PaginatedCoffeeCardEditor {
                     }
                     
                     previewItem.innerHTML = `
-                        <img src="${canvas.toDataURL()}" alt="${image.name}" style="max-width: 100%; height: auto;">
+                        <img src="${canvas.toDataURL()}" alt="${this.getDisplayName(image.name)}" style="max-width: 100%; height: auto;">
                         <div class="preview-item-info">
-                            <div class="preview-item-name">${image.name}</div>
+                            <div class="preview-item-name">${this.getDisplayName(image.name)}</div>
                             <div class="preview-item-copy">第 ${copyIndex + 1} 张</div>
                             ${copyInfo}
                         </div>
                     `;
                     
                     // 添加点击放大功能
-                    previewItem.addEventListener('click', () => this.showImageModal(canvas.toDataURL(), `${image.name} - 第${copyIndex + 1}张`));
+                    previewItem.addEventListener('click', () => this.showImageModal(canvas.toDataURL(), `${this.getDisplayName(image.name)} - 第${copyIndex + 1}张`));
                 };
                 img.src = image.data;
                 
@@ -1001,7 +1040,7 @@ class PaginatedCoffeeCardEditor {
             
             return {
                 index: index + 1,
-                imageName: image.name,
+                imageName: this.getDisplayName(image.name),
                 quantity: selection.quantity,
                 bakingDate: textContent.bakingDate || '无',
                 weight: textContent.weight || '无'
@@ -1075,7 +1114,7 @@ class PaginatedCoffeeCardEditor {
             Object.keys(logData.individualSettings).forEach(imageIndex => {
                 const setting = logData.individualSettings[imageIndex];
                 const image = this.availableImages[imageIndex];
-                content += `图片 ${image.name}:\n`;
+                content += `图片 ${this.getDisplayName(image.name)}:\n`;
                 content += `  烘焙日期: ${this.formatBakingDate(setting.bakingDate) || '无'}\n`;
                 content += `  重量: ${this.formatWeight(setting.weight) || '无'}\n\n`;
             });
