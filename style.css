@@ -34,13 +34,12 @@ html, body {
 body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
     background: linear-gradient(180deg, var(--bg-light-1), var(--bg-light-2));
+    background-attachment: fixed;
     color: var(--text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     transition: background .45s ease, color .45s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    min-height: 100vh;
     padding: 32px;
 }
 
@@ -48,6 +47,10 @@ body {
     width: 100%;
     max-width: 920px;
     margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
 }
 
 /* Glass card container */
@@ -60,7 +63,8 @@ body {
     backdrop-filter: blur(18px) saturate(140%);
     -webkit-backdrop-filter: blur(18px) saturate(140%);
     position: relative;
-    overflow: visible;
+    overflow-y: auto;
+    max-height: 90vh;
     transition: background .35s ease, box-shadow .35s ease;
     display: flex;
     flex-direction: column;
@@ -220,6 +224,11 @@ header p {
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     gap: 20px;
     margin-bottom: 30px;
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .image-item {
@@ -646,6 +655,11 @@ header p {
     display: flex;
     flex-direction: column;
     gap: 15px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .individual-image-item {
@@ -757,10 +771,12 @@ header p {
     display: flex;
     gap: 12px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .copy-inputs .individual-input-group {
     flex: 1;
+    min-width: 120px;
 }
 
 .copy-inputs .individual-input-group label {
@@ -770,12 +786,14 @@ header p {
 }
 
 .copy-inputs .individual-input-group input {
-    padding: 6px 10px;
+    padding: 8px 12px;
     border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 6px;
-    font-size: 13px;
+    border-radius: 8px;
+    font-size: 14px;
     background: rgba(255, 255, 255, 0.8);
     min-width: 100px;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .copy-inputs .individual-input-group input:focus {
@@ -791,12 +809,38 @@ header p {
 }
 
 .copy-inputs .individual-weight-wrapper input {
-    min-width: 70px;
+    min-width: 80px;
+    max-width: 120px;
 }
 
 .copy-inputs .individual-weight-unit {
     font-size: 11px;
     color: var(--muted);
+}
+
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 122, 255, 0.3);
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 122, 255, 0.5);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 /* 预览区域 */
@@ -840,6 +884,11 @@ header p {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 20px;
+    max-height: 600px;
+    overflow-y: auto;
+    padding: 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .preview-item {
@@ -1110,6 +1159,115 @@ header p {
     
     .page-header p {
         font-size: 14px;
+    }
+    
+    /* 单独设定移动端优化 */
+    .individual-image-item {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+        padding: 20px;
+    }
+    
+    .individual-image-item img {
+        width: 80px;
+        height: 80px;
+        align-self: center;
+    }
+    
+    .individual-image-inputs {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .individual-input-group {
+        width: 100%;
+    }
+    
+    .individual-input-group input {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 16px;
+    }
+    
+    .individual-weight-wrapper {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .individual-weight-wrapper input {
+        flex: 1;
+        max-width: none;
+    }
+    
+    /* 副本输入区域移动端优化 */
+    .copy-inputs {
+        flex-direction: column;
+        gap: 15px;
+        align-items: stretch;
+    }
+    
+    .copy-inputs .individual-input-group {
+        min-width: auto;
+        width: 100%;
+    }
+    
+    .copy-inputs .individual-input-group input {
+        width: 100%;
+        padding: 12px 16px;
+        font-size: 16px;
+        min-width: auto;
+    }
+    
+    .copy-inputs .individual-weight-wrapper {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .copy-inputs .individual-weight-wrapper input {
+        flex: 1;
+        max-width: none;
+        min-width: auto;
+    }
+}
+
+/* 超小屏幕优化 */
+@media (max-width: 480px) {
+    .individual-image-item {
+        padding: 15px;
+    }
+    
+    .individual-image-item img {
+        width: 60px;
+        height: 60px;
+    }
+    
+    .copy-inputs {
+        gap: 12px;
+    }
+    
+    .copy-inputs .individual-input-group input {
+        padding: 10px 14px;
+        font-size: 15px;
+    }
+    
+    .individual-input-group input {
+        padding: 10px 14px;
+        font-size: 15px;
+    }
+    
+    .individual-copies-container {
+        gap: 12px;
+    }
+    
+    .copy-item {
+        padding: 12px;
+    }
+    
+    .copy-header {
+        font-size: 13px;
+        margin-bottom: 8px;
     }
 }
 
