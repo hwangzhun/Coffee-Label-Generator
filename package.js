@@ -21,12 +21,14 @@ const filesToCopy = [
     'script.js',
     'server.js',
     'package.json',
-    'README.md'
+    'config.js',
+    'README.md',
+    'icon.svg'
 ];
 
 // 需要复制的文件夹
 const foldersToCopy = [
-    'img'
+    // 不再需要复制img文件夹，现在完全依赖CDN
 ];
 
 console.log('📄 复制文件...');
@@ -111,22 +113,27 @@ const deployInstructions = `# 咖啡名片编辑器 - 部署说明
 ├── script.js           # 前端逻辑
 ├── server.js           # 后端服务器
 ├── package.json        # 项目配置
+├── config.js           # CDN配置文件
 ├── README.md           # 说明文档
-├── img/                # 图片文件夹
-│   └── README.md       # 图片说明
 └── log/                # 日志文件夹 (自动创建)
 \`\`\`
 
+## 🌐 CDN配置要求
+- 系统完全依赖CDN获取图片
+- 需要配置正确的CDN地址在 config.js 中
+- 确保CDN服务可用且支持跨域访问
+
 ## ⚠️ 注意事项
 1. 确保服务器端口3000未被占用
-2. 确保img文件夹有写入权限
+2. 确保CDN服务可用且网络连接正常
 3. 建议配置SSL证书以使用HTTPS
 4. 定期备份log文件夹中的日志文件
 
 ## 🆘 故障排除
 - 如果无法访问，检查防火墙设置
-- 如果图片无法加载，检查img文件夹权限
+- 如果图片无法加载，检查CDN配置和网络连接
 - 如果PDF生成失败，检查Node.js版本
+- 如果CDN不可用，检查config.js中的CDN地址配置
 `;
 
 fs.writeFileSync(path.join(packageDir, 'DEPLOY.md'), deployInstructions);

@@ -17,11 +17,7 @@ if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
 }
 
-// 确保img文件夹存在
-const imgDir = path.join(__dirname, 'img');
-if (!fs.existsSync(imgDir)) {
-    fs.mkdirSync(imgDir, { recursive: true });
-}
+// 不再需要img文件夹，现在完全依赖CDN
 
 // 保存log文件的API
 app.post('/api/save-log', (req, res) => {
@@ -125,56 +121,13 @@ app.get('/api/logs/:filename', (req, res) => {
     }
 });
 
-// 获取图片文件列表的API
-app.get('/api/images', (req, res) => {
-    try {
-        // 支持的图片格式
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-        
-        // 读取img文件夹中的所有文件
-        const files = fs.readdirSync(imgDir)
-            .filter(file => {
-                const ext = path.extname(file).toLowerCase();
-                return imageExtensions.includes(ext);
-            })
-            .map(file => {
-                const filePath = path.join(imgDir, file);
-                const stats = fs.statSync(filePath);
-                return {
-                    filename: file,
-                    size: stats.size,
-                    created: stats.birthtime,
-                    modified: stats.mtime
-                };
-            })
-            .sort((a, b) => {
-                // 按文件名排序，数字文件名会正确排序
-                return a.filename.localeCompare(b.filename, undefined, { numeric: true });
-            });
-        
-        // 只返回文件名数组
-        const filenames = files.map(file => file.filename);
-        
-        console.log(`找到 ${filenames.length} 个图片文件:`, filenames);
-        
-        res.json(filenames);
-        
-    } catch (error) {
-        console.error('获取图片文件列表时出错:', error);
-        res.status(500).json({
-            success: false,
-            message: '获取图片文件列表失败',
-            error: error.message
-        });
-    }
-});
+// 图片API已移除，现在完全依赖CDN获取图片
 
 // 启动服务器
 app.listen(PORT, () => {
     console.log(`咖啡名片编辑器服务器已启动`);
     console.log(`访问地址: http://localhost:${PORT}`);
     console.log(`Log文件夹: ${logDir}`);
-    console.log(`图片文件夹: ${imgDir}`);
     console.log('='.repeat(50));
 });
 

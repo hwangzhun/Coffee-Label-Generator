@@ -6,7 +6,7 @@ class PaginatedCoffeeCardEditor {
         this.settingMode = 'global'; // 'global' 或 'individual'
         this.globalBakingDate = '';
         this.globalWeight = '';
-        this.individualSettings = {}; // 存储每张图片的单独设定 {index: {bakingDate, weight, copies: [{bakingDate, weight}]}}
+        this.individualSettingsData = {}; // 存储每张图片的单独设定 {index: {bakingDate, weight, copies: [{bakingDate, weight}]}}
         this.processedImages = [];
         this.generatedPdf = null;
         
@@ -47,10 +47,7 @@ class PaginatedCoffeeCardEditor {
         
         // 第四页元素
         this.pdfImageCount = document.getElementById('pdfImageCount');
-        this.pdfQuantityPerImage = document.getElementById('pdfQuantityPerImage');
         this.pdfTotalQuantity = document.getElementById('pdfTotalQuantity');
-        this.pdfBakingDate = document.getElementById('pdfBakingDate');
-        this.pdfWeight = document.getElementById('pdfWeight');
         this.generatePdf = document.getElementById('generatePdf');
         this.downloadPdf = document.getElementById('downloadPdf');
         this.prevToStep3 = document.getElementById('prevToStep3');
@@ -140,15 +137,15 @@ class PaginatedCoffeeCardEditor {
             item.className = 'individual-image-item';
             
             // 初始化单独设定（如果还没有的话）
-            if (!this.individualSettings[selection.index]) {
-                this.individualSettings[selection.index] = {
+            if (!this.individualSettingsData[selection.index]) {
+                this.individualSettingsData[selection.index] = {
                     bakingDate: this.globalBakingDate,
                     weight: this.globalWeight,
                     copies: []
                 };
             }
             
-            const individualSetting = this.individualSettings[selection.index];
+            const individualSetting = this.individualSettingsData[selection.index];
             
             // 确保copies数组有足够的元素
             while (individualSetting.copies.length < selection.quantity) {
@@ -156,6 +153,11 @@ class PaginatedCoffeeCardEditor {
                     bakingDate: individualSetting.bakingDate || this.globalBakingDate,
                     weight: individualSetting.weight || this.globalWeight
                 });
+            }
+            
+            // 如果数量减少了，移除多余的copies
+            if (individualSetting.copies.length > selection.quantity) {
+                individualSetting.copies = individualSetting.copies.slice(0, selection.quantity);
             }
             
             // 生成每个副本的输入框
@@ -212,22 +214,22 @@ class PaginatedCoffeeCardEditor {
                     const field = e.target.dataset.field;
                     const value = e.target.value;
                     
-                    if (!this.individualSettings[index]) {
-                        this.individualSettings[index] = {
+                    if (!this.individualSettingsData[index]) {
+                        this.individualSettingsData[index] = {
                             bakingDate: this.globalBakingDate,
                             weight: this.globalWeight,
                             copies: []
                         };
                     }
                     
-                    if (!this.individualSettings[index].copies[copyIndex]) {
-                        this.individualSettings[index].copies[copyIndex] = {
+                    if (!this.individualSettingsData[index].copies[copyIndex]) {
+                        this.individualSettingsData[index].copies[copyIndex] = {
                             bakingDate: this.globalBakingDate,
                             weight: this.globalWeight
                         };
                     }
                     
-                    this.individualSettings[index].copies[copyIndex][field] = value;
+                    this.individualSettingsData[index].copies[copyIndex][field] = value;
                     
                     this.updateStep3Buttons();
                 });
@@ -238,35 +240,47 @@ class PaginatedCoffeeCardEditor {
     }
 
     async loadAvailableImages() {
-        this.imageGrid.innerHTML = '<p class="loading-text">正在扫描图片文件...</p>';
+        this.imageGrid.innerHTML = '<p class="loading-text">正在加载图片配置...</p>';
         
         try {
-            // 首先获取图片文件列表
-            const imageFiles = await this.getImageFileList();
-            
-            if (imageFiles.length === 0) {
-                this.imageGrid.innerHTML = '<p class="loading-text">img文件夹中没有找到图片文件</p>';
-                return;
+            // 从CDN加载图片配置文件
+            const cdnConfigUrl = window.CDN_CONFIG.baseUrl + window.CDN_CONFIG.configPath;
+            const response = await fetch(cdnConfigUrl);
+            if (!response.ok) {
+                throw new Error('无法从CDN加载图片配置文件');
             }
+            
+            const config = await response.json();
+            this.imageConfig = config;
             
             this.imageGrid.innerHTML = '<p class="loading-text">正在加载图片...</p>';
             
-            const loadPromises = imageFiles.map(async (filename) => {
+            const loadPromises = config.images.map(async (imageConfig) => {
                 try {
-                    const imageUrl = `img/${filename}`;
-                    const imageData = await this.loadImageFromUrl(imageUrl);
+                    // 必须提供CDN URL，不再支持本地文件
+                    if (!imageConfig.url || imageConfig.url.trim() === '') {
+                        throw new Error('图片URL未配置');
+                    }
+                    
+                    const imageUrl = imageConfig.url;
+                    const imageData = imageUrl; // 直接使用URL，不转换为base64
+                    
                     return {
-                        name: filename,
+                        name: imageConfig.filename,
+                        displayName: imageConfig.name,
                         url: imageUrl,
                         data: imageData,
+                        config: imageConfig,
                         loaded: true
                     };
                 } catch (error) {
-                    console.error(`加载图片失败: ${filename}`, error);
+                    console.error(`加载图片失败: ${imageConfig.filename}`, error);
                     return {
-                        name: filename,
-                        url: `img/${filename}`,
+                        name: imageConfig.filename,
+                        displayName: imageConfig.name,
+                        url: imageConfig.url || '',
                         data: null,
+                        config: imageConfig,
                         loaded: false,
                         error: error.message
                     };
@@ -276,38 +290,21 @@ class PaginatedCoffeeCardEditor {
             this.availableImages = await Promise.all(loadPromises);
             this.renderImageGrid();
         } catch (error) {
-            console.error('加载图片时出错：', error);
-            this.imageGrid.innerHTML = '<p class="loading-text">图片加载失败，请检查img文件夹</p>';
+            console.error('加载图片配置时出错：', error);
+            this.imageGrid.innerHTML = '<p class="loading-text">图片配置加载失败，请检查CDN配置和网络连接</p>';
         }
     }
 
-    async getImageFileList() {
-        try {
-            // 尝试从服务器获取图片文件列表
-            const response = await fetch('/api/images');
-            if (response.ok) {
-                const files = await response.json();
-                return files.filter(file => this.isImageFile(file));
-            }
-        } catch (error) {
-            console.log('无法从服务器获取文件列表，使用默认列表');
-        }
-        
-        // 如果服务器方法失败，使用预定义列表作为后备
-        return [
-            '1.jpg', '2.jpg', '3.jpg', '4.jpg', 
-            '5.jpg', '6.jpg', '7.jpg', '8.jpg'
-        ];
-    }
 
-    isImageFile(filename) {
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'];
-        const lowerFilename = filename.toLowerCase();
-        return imageExtensions.some(ext => lowerFilename.endsWith(ext));
-    }
 
     getDisplayName(filename) {
-        // 移除文件扩展名，只显示文件名主体
+        // 优先使用配置文件中的displayName
+        const image = this.availableImages.find(img => img.name === filename);
+        if (image && image.displayName) {
+            return image.displayName;
+        }
+        
+        // 回退到原来的逻辑
         const lastDotIndex = filename.lastIndexOf('.');
         if (lastDotIndex > 0) {
             return filename.substring(0, lastDotIndex);
@@ -315,29 +312,6 @@ class PaginatedCoffeeCardEditor {
         return filename;
     }
 
-    loadImageFromUrl(url) {
-        return new Promise((resolve, reject) => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-                resolve(dataUrl);
-            };
-            
-            img.onerror = () => {
-                reject(new Error(`无法加载图片: ${url}`));
-            };
-            
-            img.src = url;
-        });
-    }
 
     renderImageGrid() {
         this.imageGrid.innerHTML = '';
@@ -490,6 +464,10 @@ class PaginatedCoffeeCardEditor {
     }
 
     updateStep3() {
+        // 如果是单独设定模式，需要重新渲染设定界面以反映数量变化
+        if (this.settingMode === 'individual') {
+            this.renderIndividualSettings();
+        }
         this.updatePreviewImages();
         this.updateStep3Buttons();
     }
@@ -518,7 +496,7 @@ class PaginatedCoffeeCardEditor {
             bakingDate = this.formatBakingDate(this.globalBakingDate);
             weight = this.formatWeight(this.globalWeight);
         } else {
-            const setting = this.individualSettings[imageIndex] || {};
+            const setting = this.individualSettingsData[imageIndex] || {};
             if (setting.copies && setting.copies[copyIndex]) {
                 // 使用副本级别的设定
                 const copy = setting.copies[copyIndex];
@@ -559,6 +537,7 @@ class PaginatedCoffeeCardEditor {
                 
                 // 创建预览图片
                 const img = new Image();
+                img.crossOrigin = 'anonymous'; // 添加跨域支持
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
@@ -577,7 +556,7 @@ class PaginatedCoffeeCardEditor {
                     // 获取副本的设定信息
                     let copyInfo = '';
                     if (this.settingMode === 'individual') {
-                        const setting = this.individualSettings[selection.index];
+                        const setting = this.individualSettingsData[selection.index];
                         if (setting && setting.copies && setting.copies[copyIndex]) {
                             const copy = setting.copies[copyIndex];
                             copyInfo = `
@@ -597,7 +576,7 @@ class PaginatedCoffeeCardEditor {
                     }
                     
                     previewItem.innerHTML = `
-                        <img src="${canvas.toDataURL()}" alt="${this.getDisplayName(image.name)}" style="max-width: 100%; height: auto;">
+                        <img src="${canvas.toDataURL('image/png', 1.0)}" alt="${this.getDisplayName(image.name)}" style="max-width: 100%; height: auto;">
                         <div class="preview-item-info">
                             <div class="preview-item-name">${this.getDisplayName(image.name)}</div>
                             <div class="preview-item-copy">第 ${copyIndex + 1} 张</div>
@@ -606,7 +585,16 @@ class PaginatedCoffeeCardEditor {
                     `;
                     
                     // 添加点击放大功能
-                    previewItem.addEventListener('click', () => this.showImageModal(canvas.toDataURL(), `${this.getDisplayName(image.name)} - 第${copyIndex + 1}张`));
+                    previewItem.addEventListener('click', () => this.showImageModal(canvas.toDataURL('image/png', 1.0), `${this.getDisplayName(image.name)} - 第${copyIndex + 1}张`));
+                };
+                img.onerror = () => {
+                    console.error('预览图片加载失败:', image.url);
+                    previewItem.innerHTML = `
+                        <div style="padding: 40px; color: #ef4444; text-align: center;">
+                            <div>${this.getDisplayName(image.name)}</div>
+                            <div style="font-size: 12px; margin-top: 5px;">图片加载失败</div>
+                        </div>
+                    `;
                 };
                 img.src = image.data;
                 
@@ -651,7 +639,7 @@ class PaginatedCoffeeCardEditor {
         } else {
             // 检查是否至少有一张图片有内容
             hasContent = this.selectedImages.some(selection => {
-                const setting = this.individualSettings[selection.index];
+                const setting = this.individualSettingsData[selection.index];
                 if (!setting) return false;
                 
                 // 检查图片级别的设定
@@ -672,17 +660,74 @@ class PaginatedCoffeeCardEditor {
     updateStep4() {
         const totalQuantity = this.selectedImages.reduce((sum, selection) => sum + selection.quantity, 0);
         this.pdfImageCount.textContent = this.selectedImages.length;
-        this.pdfQuantityPerImage.textContent = Math.round(totalQuantity / this.selectedImages.length);
         this.pdfTotalQuantity.textContent = totalQuantity;
-        if (this.settingMode === 'global') {
-            this.pdfBakingDate.textContent = this.formatBakingDate(this.globalBakingDate) || '无';
-            this.pdfWeight.textContent = this.formatWeight(this.globalWeight) || '无';
-        } else {
-            this.pdfBakingDate.textContent = '单独设定';
-            this.pdfWeight.textContent = '单独设定';
-        }
+        
+        // 生成咖啡详情
+        this.updateCoffeeDetails();
         
         this.downloadPdf.disabled = !this.generatedPdf;
+    }
+    
+    updateCoffeeDetails() {
+        const tableBody = document.getElementById('coffeeTableBody');
+        if (!tableBody) return;
+        
+        let tableRows = '';
+        
+        this.selectedImages.forEach((selection, index) => {
+            const image = this.availableImages[selection.index];
+            const imageName = this.getDisplayName(image.name);
+            
+            if (this.settingMode === 'global') {
+                // 全局设定模式
+                const bakingDate = this.formatBakingDate(this.globalBakingDate) || '无';
+                const weight = this.formatWeight(this.globalWeight) || '无';
+                // 移除"烘焙日期："前缀，只保留日期部分
+                const dateOnly = bakingDate.replace('烘焙日期：', '');
+                tableRows += `
+                    <tr>
+                        <td class="coffee-name" title="${imageName}">${imageName}</td>
+                        <td class="weight">${weight}</td>
+                        <td class="baking-date">${dateOnly}</td>
+                        <td class="quantity">${selection.quantity}张</td>
+                    </tr>
+                `;
+            } else {
+                // 单独设定模式
+                const individualSetting = this.individualSettingsData[selection.index];
+                if (individualSetting && individualSetting.copies) {
+                    individualSetting.copies.forEach((copy, copyIndex) => {
+                        const bakingDate = this.formatBakingDate(copy.bakingDate) || '无';
+                        const weight = this.formatWeight(copy.weight) || '无';
+                        // 移除"烘焙日期："前缀，只保留日期部分
+                        const dateOnly = bakingDate.replace('烘焙日期：', '');
+                        tableRows += `
+                            <tr>
+                                <td class="coffee-name" title="${imageName}">${imageName}</td>
+                                <td class="weight">${weight}</td>
+                                <td class="baking-date">${dateOnly}</td>
+                                <td class="quantity">1张</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tableRows += `
+                        <tr>
+                            <td class="coffee-name" title="${imageName}">${imageName}</td>
+                            <td class="weight">无设定</td>
+                            <td class="baking-date">无设定</td>
+                            <td class="quantity">${selection.quantity}张</td>
+                        </tr>
+                    `;
+                }
+            }
+        });
+        
+        if (tableRows) {
+            tableBody.innerHTML = tableRows;
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="4" class="no-data">暂无详情</td></tr>';
+        }
     }
 
     async generatePDF() {
@@ -696,7 +741,7 @@ class PaginatedCoffeeCardEditor {
             hasContent = this.globalBakingDate || this.globalWeight;
         } else {
             hasContent = this.selectedImages.some(selection => {
-                const setting = this.individualSettings[selection.index];
+                const setting = this.individualSettingsData[selection.index];
                 if (!setting) return false;
                 
                 // 检查图片级别的设定
@@ -747,13 +792,16 @@ class PaginatedCoffeeCardEditor {
                     }
                     
                     // 等待图片加载完成
-                    await this.processImageForPDF(pdf, imageData.data, selection.index, copyIndex, cardsOnPage, cardWidth, cardHeight);
+                    await this.processImageForPDF(pdf, imageData.url, selection.index, copyIndex, cardsOnPage, cardWidth, cardHeight);
                     
                     cardsOnPage++;
                     processedCards++;
                     
                     // 更新进度
                     this.generatePdf.textContent = `生成中... ${processedCards}/${totalCards}`;
+                    
+                    // 添加1秒延迟
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
             
@@ -778,6 +826,7 @@ class PaginatedCoffeeCardEditor {
     processImageForPDF(pdf, imageData, imageIndex, copyIndex, cardPosition, cardWidth, cardHeight) {
         return new Promise((resolve, reject) => {
             const img = new Image();
+            img.crossOrigin = 'anonymous'; // 添加跨域支持
             img.onload = () => {
                 try {
                     const canvas = document.createElement('canvas');
@@ -796,8 +845,8 @@ class PaginatedCoffeeCardEditor {
                     const y = row * cardHeight;
                     
                     pdf.addImage(
-                        canvas.toDataURL('image/jpeg', 0.95), 
-                        'JPEG', 
+                        canvas.toDataURL('image/png', 1.0), 
+                        'PNG', 
                         x, 
                         y, 
                         cardWidth, 
@@ -890,10 +939,30 @@ class PaginatedCoffeeCardEditor {
             const day = String(today.getDate()).padStart(2, '0');
             const filename = `${year}-${month}-${day}.pdf`;
             
-            this.generatedPdf.save(filename);
+            // 检测是否为iOS Safari
+            const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
             
-            // 保存log文件到服务器
-            this.saveLogToServer(filename);
+            if (isIOSSafari) {
+                // iOS Safari特殊处理：先保存log，再下载PDF
+                this.saveLogToServer(filename).then(() => {
+                    // log保存完成后再下载PDF
+                    setTimeout(() => {
+                        this.generatedPdf.save(filename);
+                        this.clearCache();
+                    }, 500);
+                });
+            } else {
+                // 其他浏览器：先下载PDF，再保存log
+                this.generatedPdf.save(filename);
+                
+                // 延迟执行log文件保存，避免混淆
+                setTimeout(() => {
+                    this.saveLogToServer(filename);
+                }, 1000);
+                
+                // 自动清理缓存（静默进行）
+                this.clearCache();
+            }
         }
     }
 
@@ -905,8 +974,8 @@ class PaginatedCoffeeCardEditor {
             // 创建log文件内容
             const logContent = this.formatLogContent(logData);
             
-            // 生成带序号的log文件名
-            const logFilename = await this.generateLogFilename();
+            // 生成与PDF文件名一致的log文件名
+            const logFilename = await this.generateLogFilename(pdfFilename);
             
             // 发送到服务器保存
             const response = await fetch('/api/save-log', {
@@ -942,46 +1011,11 @@ class PaginatedCoffeeCardEditor {
         }
     }
 
-    async generateLogFilename() {
+    async generateLogFilename(pdfFilename) {
         try {
-            // 获取今天的日期
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const datePrefix = `${year}-${month}-${day}`;
-            
-            // 获取今天的log文件列表
-            const response = await fetch('/api/logs');
-            if (!response.ok) {
-                // 如果获取失败，返回默认文件名
-                return `${datePrefix}-01.log`;
-            }
-            
-            const data = await response.json();
-            if (!data.success) {
-                return `${datePrefix}-01.log`;
-            }
-            
-            // 筛选出今天的log文件
-            const todayLogs = data.logs.filter(log => 
-                log.filename.startsWith(datePrefix)
-            );
-            
-            // 计算下一个序号
-            let nextSequence = 1;
-            if (todayLogs.length > 0) {
-                // 提取现有文件的最大序号
-                const sequences = todayLogs.map(log => {
-                    const match = log.filename.match(/-(\d+)\.log$/);
-                    return match ? parseInt(match[1]) : 0;
-                });
-                nextSequence = Math.max(...sequences) + 1;
-            }
-            
-            // 生成新的文件名
-            const sequence = String(nextSequence).padStart(2, '0');
-            return `${datePrefix}-${sequence}.log`;
+            // 使用PDF文件名作为基础，将.pdf替换为.log
+            const logFilename = pdfFilename.replace('.pdf', '.log');
+            return logFilename;
             
         } catch (error) {
             console.error('生成log文件名时出错:', error);
@@ -990,7 +1024,7 @@ class PaginatedCoffeeCardEditor {
             const year = today.getFullYear();
             const month = String(today.getMonth() + 1).padStart(2, '0');
             const day = String(today.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}-01.log`;
+            return `${year}-${month}-${day}.log`;
         }
     }
 
@@ -1060,7 +1094,7 @@ class PaginatedCoffeeCardEditor {
                 bakingDate: this.formatBakingDate(this.globalBakingDate) || '无',
                 weight: this.formatWeight(this.globalWeight) || '无'
             } : null,
-            individualSettings: this.settingMode === 'individual' ? this.individualSettings : null
+            individualSettings: this.settingMode === 'individual' ? this.individualSettingsData : null
         };
     }
 
@@ -1127,19 +1161,54 @@ class PaginatedCoffeeCardEditor {
         return content;
     }
 
+    clearCache() {
+        try {
+            // 清理内存中的图片数据
+            this.availableImages.forEach(image => {
+                if (image.data && typeof image.data === 'string' && image.data.startsWith('data:')) {
+                    // 清理base64数据
+                    image.data = null;
+                }
+            });
+            
+            // 清理预览图片的canvas缓存
+            const previewItems = this.previewImagesGrid.querySelectorAll('.preview-item');
+            previewItems.forEach(item => {
+                const img = item.querySelector('img');
+                if (img && img.src.startsWith('data:')) {
+                    img.src = '';
+                }
+            });
+            
+            // 清理PDF对象
+            if (this.generatedPdf) {
+                this.generatedPdf = null;
+            }
+            
+            // 强制垃圾回收（如果浏览器支持）
+            if (window.gc) {
+                window.gc();
+            }
+            
+            console.log('缓存清理完成');
+        } catch (error) {
+            console.warn('缓存清理时出现错误:', error);
+        }
+    }
+
     restart() {
         // 重置所有数据
         this.selectedImages = [];
         this.settingMode = 'global';
         this.globalBakingDate = '';
         this.globalWeight = '';
-        this.individualSettings = {};
+        this.individualSettingsData = {}; // 重置数据对象
         this.generatedPdf = null;
         
         // 重置界面
         document.querySelector('input[name="settingMode"][value="global"]').checked = true;
         this.globalSettings.style.display = 'block';
-        this.individualSettings.style.display = 'none';
+        this.individualSettings.style.display = 'none'; // 使用DOM元素
         this.globalBakingDateInput.value = new Date().toISOString().split('T')[0];
         this.globalWeightInput.value = '';
         
@@ -1148,6 +1217,16 @@ class PaginatedCoffeeCardEditor {
         imageItems.forEach(item => {
             item.classList.remove('selected');
         });
+        
+        // 重置预览区域
+        this.previewImagesGrid.innerHTML = '<p class="no-preview">请先选择图片</p>';
+        this.previewImageInfo.textContent = '请先选择图片';
+        this.previewQuantityInfo.textContent = '';
+        
+        // 重置PDF相关状态
+        this.downloadPdf.disabled = true;
+        this.generatePdf.disabled = false;
+        this.generatePdf.textContent = '生成PDF';
         
         // 回到第一步
         this.goToStep(1);

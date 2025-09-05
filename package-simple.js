@@ -12,7 +12,7 @@ if (fs.existsSync(packageDir)) {
 fs.mkdirSync(packageDir, { recursive: true });
 
 // 复制所有必要文件
-const files = ['index.html', 'style.css', 'script.js', 'server.js', 'package.json'];
+const files = ['index.html', 'style.css', 'script.js', 'server.js', 'package.json', 'config.js','icon.svg'];
 files.forEach(file => {
     if (fs.existsSync(file)) {
         fs.copyFileSync(file, path.join(packageDir, file));
@@ -20,11 +20,7 @@ files.forEach(file => {
     }
 });
 
-// 复制img文件夹
-if (fs.existsSync('img')) {
-    copyDir('img', path.join(packageDir, 'img'));
-    console.log('✅ img/');
-}
+// 不再需要复制img文件夹，现在完全依赖CDN
 
 // 创建宝塔面板部署说明
 const deployGuide = `# 宝塔面板部署指南
@@ -66,7 +62,12 @@ const deployGuide = `# 宝塔面板部署指南
 - script.js: 前端逻辑
 - server.js: 后端服务器
 - package.json: 项目配置
-- img/: 图片文件夹
+- config.js: CDN配置文件
+
+## 🌐 CDN配置要求
+- 系统完全依赖CDN获取图片
+- 需要配置正确的CDN地址在 config.js 中
+- 确保CDN服务可用且支持跨域访问
 
 ## 🔧 常用命令
 - 重启: pm2 restart coffee-editor
@@ -75,8 +76,9 @@ const deployGuide = `# 宝塔面板部署指南
 
 ## ⚠️ 注意事项
 1. 确保端口3000可用
-2. img文件夹需要写入权限
+2. 确保CDN服务可用且网络连接正常
 3. 建议配置SSL证书
+4. 如果图片无法加载，检查CDN配置和网络连接
 `;
 
 fs.writeFileSync(path.join(packageDir, '宝塔部署说明.txt'), deployGuide);
