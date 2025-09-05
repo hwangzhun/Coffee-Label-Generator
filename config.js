@@ -1,7 +1,7 @@
 // CDN配置
 window.CDN_CONFIG = {
     // CDN基础地址 - 请替换为你的CDN域名
-    baseUrl: 'https://raw.githubusercontent.com/hwangzhun/ts/refs/heads/main',
+    baseUrl: 'https://blog-data-1306368489.cos.ap-guangzhou.myqcloud.com/cafecard.hwangzhun.com',
     
     // 图片配置文件路径
     configPath: '/images.json',
