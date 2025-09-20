@@ -22,7 +22,7 @@ const filesToCopy = [
     'server.js',
     'package.json',
     'config.js',
-    'README.md',
+    'font-loader.js',
     'icon.svg'
 ];
 

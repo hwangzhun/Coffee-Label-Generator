@@ -1235,5 +1235,6 @@ class PaginatedCoffeeCardEditor {
 
 // 初始化应用
 document.addEventListener('DOMContentLoaded', () => {
+    // 直接初始化主应用程序
     new PaginatedCoffeeCardEditor();
 });

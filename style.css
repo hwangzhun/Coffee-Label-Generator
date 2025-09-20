@@ -1,7 +1,10 @@
 @font-face {
     font-family: 'OPPO Sans 4.0';
-    src: url("https://blog-data-1306368489.cos.ap-guangzhou.myqcloud.com/cafecard.hwangzhun.com/OPPO%20Sans%204.0.ttf") format('opentype');
+    src: url("https://blog-data-1306368489.cos.ap-guangzhou.myqcloud.com/cafecard.hwangzhun.com/OPPO%20Sans%204.0.woff2") format('woff2'),
+         url("https://blog-data-1306368489.cos.ap-guangzhou.myqcloud.com/cafecard.hwangzhun.com/OPPO%20Sans%204.0.ttf") format('opentype');
+    font-display: swap; /* 字体交换策略，提升加载体验 */
 }
+
 
 :root {
     --bg-light-1: #f5f6f8;
@@ -80,6 +83,7 @@ body {
     flex-direction: column;
     min-height: 600px;
 }
+
 
 header {
     text-align: center;
@@ -272,7 +276,7 @@ header::before {
 }
 
 .step-title {
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     color: var(--muted);
     text-align: center;
     font-weight: 500;
@@ -383,7 +387,7 @@ header::before {
 .image-item .image-name {
     padding: 8px;
     text-align: center;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     color: #4a5568;
     background: white;
     border-top: 1px solid #e2e8f0;
@@ -1339,7 +1343,7 @@ header::before {
     }
     
     .progress-bar {
-        flex-direction: column;
+        flex-direction: row;
         gap: 20px;
     }
     
@@ -1380,6 +1384,11 @@ header::before {
     }
     
     /* 单独设定移动端优化 */
+
+    .preview-info {
+        text-align: center;
+    }
+
     .individual-image-item {
         flex-direction: column;
         align-items: stretch;
@@ -1452,6 +1461,21 @@ header::before {
 
 /* 超小屏幕优化 */
 @media (max-width: 480px) {
+
+    .image-quantity-item {
+        flex-direction: column;
+    }
+
+    .image-quantity-item img {
+        width: 90%;
+        height: 90%;
+        border: 1px solid rgba(0, 0, 0, 0.06);;
+    }
+
+    .image-quantity-info .image-size {
+        text-align: center;
+    }
+    
     .individual-image-item {
         padding: 15px;
     }

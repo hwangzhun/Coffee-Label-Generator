@@ -1,18 +1,32 @@
 {
   "name": "coffee-card-editor",
-  "version": "1.0.0",
+  "version": "1.1.2",
   "description": "咖啡名片批量编辑器",
-  "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "build": "parcel build index.html --dist-dir dist",
+    "serve": "parcel serve index.html --port 3000",
+    "clean": "rimraf dist .parcel-cache",
+    "clean:win": "if exist dist rmdir /s /q dist && if exist .parcel-cache rmdir /s /q .parcel-cache",
+    "build:prod": "npm run clean:win && npm run build && npm run copy:files",
+    "build:prod:unix": "npm run clean && npm run build && npm run copy:files",
+    "copy:files": "npm run copy:package && npm run copy:server && npm run copy:assets",
+    "copy:package": "node -e \"const pkg=require('./package.json'); const prod={name:pkg.name,version:pkg.version,description:pkg.description,scripts:{start:'node server.js'},dependencies:pkg.dependencies,keywords:pkg.keywords,author:pkg.author,license:pkg.license}; require('fs').writeFileSync('dist/package.json', JSON.stringify(prod,null,2));\"",
+    "copy:server": "node -e \"['server.js','config.js'].forEach(f=>{try{require('fs').copyFileSync(f,'dist/'+f);console.log('✅',f)}catch(e){console.log('⚠️',f,'not found')}})\"",
+    "copy:assets": "node -e \"const fs=require('fs'),path=require('path'); function copyDir(src,dest){if(!fs.existsSync(dest))fs.mkdirSync(dest,{recursive:true}); fs.readdirSync(src,{withFileTypes:true}).forEach(entry=>{const srcPath=path.join(src,entry.name),destPath=path.join(dest,entry.name); entry.isDirectory()?copyDir(srcPath,destPath):fs.copyFileSync(srcPath,destPath)})} ['log'].forEach(dir=>{try{copyDir(dir,'dist/'+dir);console.log('✅ dir:',dir)}catch(e){console.log('⚠️ dir:',dir,'error')}})\""
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "express": "^4.18.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@parcel/optimizer-css": "^2.16.0",
+    "@parcel/optimizer-htmlnano": "^2.16.0",
+    "@parcel/optimizer-terser": "^2.16.0",
+    "nodemon": "^3.0.1",
+    "parcel": "^2.16.0",
+    "rimraf": "^5.0.5"
   },
   "keywords": [
     "coffee",

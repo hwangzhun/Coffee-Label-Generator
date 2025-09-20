@@ -12,7 +12,7 @@ if (fs.existsSync(packageDir)) {
 fs.mkdirSync(packageDir, { recursive: true });
 
 // 复制所有必要文件
-const files = ['index.html', 'style.css', 'script.js', 'server.js', 'package.json', 'config.js','icon.svg'];
+const files = ['index.html', 'style.css', 'script.js', 'server.js', 'package.json', 'config.js','icon.svg','font-loader.js'];
 files.forEach(file => {
     if (fs.existsSync(file)) {
         fs.copyFileSync(file, path.join(packageDir, file));

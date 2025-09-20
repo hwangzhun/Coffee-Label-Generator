@@ -20,8 +20,14 @@ app.use(express.static('.', {
             res.setHeader('Pragma', 'no-cache');
             res.setHeader('Expires', '0');
         } else if (path.endsWith('.js') || path.endsWith('.css')) {
-            // JS和CSS文件缓存1小时，但允许重新验证
-            res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+            // 开发模式下不缓存JS和CSS文件，生产模式下缓存1小时
+            if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                res.setHeader('Pragma', 'no-cache');
+                res.setHeader('Expires', '0');
+            } else {
+                res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+            }
         } else if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif') || path.endsWith('.svg')) {
             // 图片文件缓存1天
             res.setHeader('Cache-Control', 'public, max-age=86400');
