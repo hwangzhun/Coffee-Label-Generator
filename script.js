@@ -130,6 +130,7 @@ class PaginatedCoffeeCardEditor {
 
     renderIndividualSettings() {
         this.individualImagesList.innerHTML = '';
+        const today = new Date().toISOString().split('T')[0]; // 获取当天日期
         
         this.selectedImages.forEach((selection, listIndex) => {
             const image = this.availableImages[selection.index];
@@ -139,7 +140,7 @@ class PaginatedCoffeeCardEditor {
             // 初始化单独设定（如果还没有的话）
             if (!this.individualSettingsData[selection.index]) {
                 this.individualSettingsData[selection.index] = {
-                    bakingDate: this.globalBakingDate,
+                    bakingDate: this.globalBakingDate || today,
                     weight: this.globalWeight,
                     copies: []
                 };
@@ -150,7 +151,7 @@ class PaginatedCoffeeCardEditor {
             // 确保copies数组有足够的元素
             while (individualSetting.copies.length < selection.quantity) {
                 individualSetting.copies.push({
-                    bakingDate: individualSetting.bakingDate || this.globalBakingDate,
+                    bakingDate: individualSetting.bakingDate || this.globalBakingDate || today,
                     weight: individualSetting.weight || this.globalWeight
                 });
             }
@@ -171,7 +172,7 @@ class PaginatedCoffeeCardEditor {
                             <div class="individual-input-group">
                                 <label>烘焙日期</label>
                                 <input type="date" 
-                                       value="${copy.bakingDate || ''}" 
+                                       value="${copy.bakingDate || today}" 
                                        data-index="${selection.index}"
                                        data-copy="${copyIndex}"
                                        data-field="bakingDate"
@@ -215,8 +216,9 @@ class PaginatedCoffeeCardEditor {
                     const value = e.target.value;
                     
                     if (!this.individualSettingsData[index]) {
+                        const today = new Date().toISOString().split('T')[0]; // 获取当天日期
                         this.individualSettingsData[index] = {
-                            bakingDate: this.globalBakingDate,
+                            bakingDate: this.globalBakingDate || today,
                             weight: this.globalWeight,
                             copies: []
                         };
@@ -224,7 +226,7 @@ class PaginatedCoffeeCardEditor {
                     
                     if (!this.individualSettingsData[index].copies[copyIndex]) {
                         this.individualSettingsData[index].copies[copyIndex] = {
-                            bakingDate: this.globalBakingDate,
+                            bakingDate: this.globalBakingDate || today,
                             weight: this.globalWeight
                         };
                     }
@@ -930,14 +932,10 @@ class PaginatedCoffeeCardEditor {
     }
 
 
-    downloadPDF() {
+    async downloadPDF() {
         if (this.generatedPdf) {
-            // 生成当天日期格式的文件名
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const filename = `${year}-${month}-${day}.pdf`;
+            // 生成带序号的文件名
+            const filename = await this.generateFilenameWithSequence('pdf');
             
             // 检测是否为iOS Safari
             const isIOSSafari = /iPad|iPhone|iPod/.test(navigator.userAgent) && /Safari/.test(navigator.userAgent);
@@ -1011,6 +1009,37 @@ class PaginatedCoffeeCardEditor {
         }
     }
 
+    async generateFilenameWithSequence(extension) {
+        try {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            
+            // 获取当天已有的文件数量来确定序号
+            const response = await fetch('/api/logs');
+            const data = await response.json();
+            
+            if (data.success) {
+                const todayPrefix = `${year}-${month}-${day}`;
+                const todayFiles = data.logs.filter(log => log.filename.startsWith(todayPrefix));
+                const sequence = String(todayFiles.length + 1).padStart(2, '0');
+                return `${todayPrefix}-${sequence}.${extension}`;
+            } else {
+                // 如果获取文件列表失败，使用序号01
+                return `${year}-${month}-${day}-01.${extension}`;
+            }
+        } catch (error) {
+            console.error('生成文件名时出错:', error);
+            // 出错时返回默认文件名
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}-01.${extension}`;
+        }
+    }
+
     async generateLogFilename(pdfFilename) {
         try {
             // 使用PDF文件名作为基础，将.pdf替换为.log
@@ -1024,7 +1053,7 @@ class PaginatedCoffeeCardEditor {
             const year = today.getFullYear();
             const month = String(today.getMonth() + 1).padStart(2, '0');
             const day = String(today.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}.log`;
+            return `${year}-${month}-${day}-01.log`;
         }
     }
 
@@ -1140,19 +1169,6 @@ class PaginatedCoffeeCardEditor {
             }
         });
         
-        if (logData.settingMode === 'individual' && logData.individualSettings) {
-            content += '\n' + '-'.repeat(50) + '\n';
-            content += '单独设定详情\n';
-            content += '-'.repeat(50) + '\n';
-            
-            Object.keys(logData.individualSettings).forEach(imageIndex => {
-                const setting = logData.individualSettings[imageIndex];
-                const image = this.availableImages[imageIndex];
-                content += `图片 ${this.getDisplayName(image.name)}:\n`;
-                content += `  烘焙日期: ${this.formatBakingDate(setting.bakingDate) || '无'}\n`;
-                content += `  重量: ${this.formatWeight(setting.weight) || '无'}\n\n`;
-            });
-        }
         
         content += '\n' + '='.repeat(80) + '\n';
         content += '日志结束\n';

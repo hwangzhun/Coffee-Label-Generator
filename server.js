@@ -10,41 +10,11 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// 设置静态文件的Cache-Control头
-app.use(express.static('.', {
-    setHeaders: (res, path) => {
-        // 根据文件类型设置不同的缓存策略
-        if (path.endsWith('.html')) {
-            // HTML文件不缓存，确保用户总是获取最新版本
-            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
-        } else if (path.endsWith('.js') || path.endsWith('.css')) {
-            // 开发模式下不缓存JS和CSS文件，生产模式下缓存1小时
-            if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-                res.setHeader('Pragma', 'no-cache');
-                res.setHeader('Expires', '0');
-            } else {
-                res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
-            }
-        } else if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif') || path.endsWith('.svg')) {
-            // 图片文件缓存1天
-            res.setHeader('Cache-Control', 'public, max-age=86400');
-        } else {
-            // 其他文件默认缓存1小时
-            res.setHeader('Cache-Control', 'public, max-age=3600');
-        }
-    }
-}));
-
 // 确保log文件夹存在
 const logDir = path.join(__dirname, 'log');
 if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
 }
-
-// 不再需要img文件夹，现在完全依赖CDN
 
 // 保存log文件的API
 app.post('/api/save-log', (req, res) => {
@@ -160,18 +130,37 @@ app.get('/api/logs/:filename', (req, res) => {
     }
 });
 
-// 图片API已移除，现在完全依赖CDN获取图片
+// 设置静态文件的Cache-Control头
+app.use(express.static('.', {
+    setHeaders: (res, path) => {
+        // 根据文件类型设置不同的缓存策略
+        if (path.endsWith('.html')) {
+            // HTML文件不缓存，确保用户总是获取最新版本
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        } else if (path.endsWith('.js') || path.endsWith('.css')) {
+            // 开发模式下不缓存JS和CSS文件，生产模式下缓存1小时
+            if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                res.setHeader('Pragma', 'no-cache');
+                res.setHeader('Expires', '0');
+            } else {
+                res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+            }
+        } else if (path.endsWith('.png') || path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.gif') || path.endsWith('.svg')) {
+            // 图片文件缓存1天
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+        } else {
+            // 其他文件默认缓存1小时
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+        }
+    }
+}));
 
 // 启动服务器
 app.listen(PORT, () => {
     console.log(`咖啡名片编辑器服务器已启动`);
     console.log(`访问地址: http://localhost:${PORT}`);
     console.log(`Log文件夹: ${logDir}`);
-    console.log('='.repeat(50));
-});
-
-// 优雅关闭
-process.on('SIGINT', () => {
-    console.log('\n正在关闭服务器...');
-    process.exit(0);
 });
