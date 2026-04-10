@@ -1,9 +1,4 @@
-@font-face {
-    font-family: 'OPPO Sans 4.0';
-    src: url("https://blog-data-1306368489.cos.ap-guangzhou.myqcloud.com/cafecard.hwangzhun.com/OPPO%20Sans%204.0.woff2") format('woff2'),
-         url("https://blog-data-1306368489.cos.ap-guangzhou.myqcloud.com/cafecard.hwangzhun.com/OPPO%20Sans%204.0.ttf") format('opentype');
-    font-display: swap; /* 字体交换策略，提升加载体验 */
-}
+/* 字体将通过 JavaScript 动态加载，使用签名URL访问私有字体文件 */
 
 
 :root {
@@ -342,6 +337,45 @@ header::before {
     margin-bottom: 30px;
 }
 
+.image-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.35);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(10px);
+}
+
+.image-search-group {
+    flex: 1;
+}
+
+.image-search-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.image-search-input:focus {
+    outline: none;
+    border-color: var(--accent-1);
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+}
+
+.image-reset-btn {
+    min-width: 88px;
+    height: 40px;
+    padding: 0 16px;
+}
+
 .image-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -420,6 +454,111 @@ header::before {
     font-size: 15px;
     padding: 40px;
     grid-column: 1 / -1;
+}
+
+/* 加载进度条容器 */
+.loading-progress-container {
+    grid-column: 1 / -1;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.progress-bar-wrapper {
+    width: 100%;
+    max-width: 500px;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 0 auto 20px;
+    position: relative;
+    backdrop-filter: blur(10px);
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-1), var(--accent-2));
+    border-radius: 10px;
+    transition: width 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.progress-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.progress-percentage {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--accent-1);
+    line-height: 1.2;
+}
+
+.progress-stage {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.progress-count {
+    font-size: 14px;
+    color: var(--muted);
+    opacity: 0.8;
+    line-height: 1.4;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .loading-progress-container {
+        padding: 30px 15px;
+    }
+    
+    .progress-bar-wrapper {
+        max-width: 100%;
+        height: 6px;
+        margin-bottom: 15px;
+    }
+    
+    .progress-percentage {
+        font-size: 20px;
+    }
+    
+    .progress-stage {
+        font-size: 14px;
+    }
+    
+    .progress-count {
+        font-size: 13px;
+    }
 }
 
 /* 数量选择区域 */
@@ -1354,6 +1493,15 @@ header::before {
     .image-grid {
         grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
         gap: 15px;
+    }
+
+    .image-tools {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .image-reset-btn {
+        width: 100%;
     }
     
     .page-actions {

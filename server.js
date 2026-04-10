@@ -1,7 +1,11 @@
+// 加载环境变量（必须在其他模块之前）
+require('dotenv').config();
+
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const cosRouter = require('./server-cos');
 
 const app = express();
 const PORT = 3000;
@@ -9,6 +13,9 @@ const PORT = 3000;
 // 中间件
 app.use(cors());
 app.use(express.json());
+
+// COS API路由（密钥保存在服务器端）
+app.use('/api/cos', cosRouter);
 
 // 确保log文件夹存在
 const logDir = path.join(__dirname, 'log');

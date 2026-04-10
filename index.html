@@ -8,7 +8,15 @@
     <link rel="shortcut icon" type="image/png" href="icon.svg">
     <link rel="apple-touch-icon" href="icon.svg">
     <link rel="stylesheet" href="style.css">
+    <!-- 本地配置文件（仅在 useBackendApi 为 false 时使用） -->
+    <script src="config.local.js" onerror="console.warn('config.local.js 不存在，使用默认配置')"></script>
     <script src="config.js"></script>
+    <script src="logger.js"></script>
+    <!-- COS工具：根据配置选择使用后端API或前端SDK -->
+    <script src="cos-api-utils.js"></script>
+    <!-- 腾讯云COS SDK（仅在 useBackendApi 为 false 时使用） -->
+    <script src="https://cdn.jsdelivr.net/npm/cos-js-sdk-v5@1.4.0/dist/cos-js-sdk-v5.min.js"></script>
+    <script src="cos-utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
@@ -56,8 +64,29 @@
                 </div>
                 
                 <div class="image-selection-container">
+                    <div class="image-tools" id="imageTools">
+                        <div class="image-search-group">
+                            <input
+                                type="text"
+                                id="imageSearchInput"
+                                class="image-search-input"
+                                placeholder="搜索名片名/拼音首字母"
+                                autocomplete="off"
+                            >
+                        </div>
+                        <button id="imageFilterResetBtn" class="btn btn-secondary image-reset-btn" type="button">清空</button>
+                    </div>
                     <div class="image-grid" id="imageGrid">
-                        <p class="loading-text">正在加载咖啡名片...</p>
+                        <div class="loading-progress-container">
+                            <div class="progress-bar-wrapper">
+                                <div class="progress-bar-fill" style="width: 0%"></div>
+                            </div>
+                            <div class="progress-info">
+                                <span class="progress-percentage">0%</span>
+                                <span class="progress-stage">正在初始化...</span>
+                                <span class="progress-count">0/0 张图片</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 

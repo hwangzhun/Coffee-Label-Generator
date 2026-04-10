@@ -2,6 +2,7 @@ class PaginatedCoffeeCardEditor {
     constructor() {
         this.currentStep = 1;
         this.availableImages = [];
+        this.searchKeyword = '';
         this.selectedImages = []; // 存储 {index, quantity} 对象
         this.settingMode = 'global'; // 'global' 或 'individual'
         this.globalBakingDate = '';
@@ -13,6 +14,7 @@ class PaginatedCoffeeCardEditor {
         this.initializeElements();
         this.bindEvents();
         this.initializeDefaultValues();
+        this.loadFonts(); // 先加载字体
         this.loadAvailableImages();
     }
 
@@ -23,6 +25,8 @@ class PaginatedCoffeeCardEditor {
         
         // 第一页元素
         this.imageGrid = document.getElementById('imageGrid');
+        this.imageSearchInput = document.getElementById('imageSearchInput');
+        this.imageFilterResetBtn = document.getElementById('imageFilterResetBtn');
         this.nextToStep2 = document.getElementById('nextToStep2');
         
         // 第二页元素
@@ -63,6 +67,21 @@ class PaginatedCoffeeCardEditor {
     bindEvents() {
         // 第一页事件
         this.nextToStep2.addEventListener('click', () => this.goToStep(2));
+        if (this.imageSearchInput) {
+            this.imageSearchInput.addEventListener('input', (e) => {
+                this.searchKeyword = e.target.value || '';
+                this.renderImageGrid();
+            });
+        }
+        if (this.imageFilterResetBtn) {
+            this.imageFilterResetBtn.addEventListener('click', () => {
+                this.searchKeyword = '';
+                if (this.imageSearchInput) {
+                    this.imageSearchInput.value = '';
+                }
+                this.renderImageGrid();
+            });
+        }
         
         // 第二页事件
         this.prevToStep1.addEventListener('click', () => this.goToStep(1));
@@ -241,60 +260,399 @@ class PaginatedCoffeeCardEditor {
         });
     }
 
-    async loadAvailableImages() {
-        this.imageGrid.innerHTML = '<p class="loading-text">正在加载图片配置...</p>';
+    /**
+     * 加载字体文件（使用签名URL）
+     */
+    async loadFonts() {
+        const config = window.CDN_CONFIG;
+        const fontBaseUrl = config.baseUrl + '/fonts';
+        
+        // 字体文件路径
+        const woff2Path = `${fontBaseUrl}/OPPO Sans 4.0.woff2`;
+        const ttfPath = `${fontBaseUrl}/OPPO Sans 4.0.ttf`;
         
         try {
-            // 从CDN加载图片配置文件
-            const cdnConfigUrl = window.CDN_CONFIG.baseUrl + window.CDN_CONFIG.configPath;
-            const response = await fetch(cdnConfigUrl);
-            if (!response.ok) {
-                throw new Error('无法从CDN加载图片配置文件');
+            let woff2Url = woff2Path;
+            let ttfUrl = ttfPath;
+            
+            // 如果启用了COS签名访问，生成签名URL
+            if (config.cos && config.cos.useSignature) {
+                try {
+                    // 根据配置选择使用后端API或前端SDK
+                    if (config.cos.useBackendApi && window.cosApiUtils) {
+                        // 使用后端API（推荐，密钥不暴露）
+                        woff2Url = await window.cosApiUtils.getSignedUrl(woff2Path);
+                        ttfUrl = await window.cosApiUtils.getSignedUrl(ttfPath);
+                    } else if (window.cosUtils) {
+                        // 使用前端SDK（密钥会暴露，不推荐）
+                        woff2Url = await window.cosUtils.getSignedUrl(woff2Path);
+                        ttfUrl = await window.cosUtils.getSignedUrl(ttfPath);
+                    }
+                    window.logger?.log('字体签名URL生成成功');
+                } catch (error) {
+                    window.logger?.warn('生成字体签名URL失败，使用原URL:', error);
+                }
             }
             
-            const config = await response.json();
-            this.imageConfig = config;
+            // 动态创建@font-face规则
+            const fontFaceRule = `@font-face {
+    font-family: 'OPPO Sans 4.0';
+    src: url("${woff2Url}") format('woff2'),
+         url("${ttfUrl}") format('opentype');
+    font-display: swap;
+}`;
             
-            this.imageGrid.innerHTML = '<p class="loading-text">正在加载图片...</p>';
+            // 创建style标签并注入到head
+            const style = document.createElement('style');
+            style.textContent = fontFaceRule;
+            document.head.appendChild(style);
             
-            const loadPromises = config.images.map(async (imageConfig) => {
-                try {
-                    // 必须提供CDN URL，不再支持本地文件
-                    if (!imageConfig.url || imageConfig.url.trim() === '') {
-                        throw new Error('图片URL未配置');
-                    }
+            window.logger?.log('字体 OPPO Sans 4.0 加载成功');
+        } catch (error) {
+            window.logger?.error('加载字体失败:', error);
+        }
+    }
+
+    /**
+     * 批量失败时回退到逐个生成签名URL
+     * @param {Array} batch - 当前批次的图片配置
+     * @param {number} batchIndex - 当前批次索引
+     * @param {number} totalBatches - 总批次数
+     * @param {number} totalImages - 总图片数
+     * @returns {Promise<Array<string>>} 签名URL数组
+     */
+    async fallbackToIndividualSigning(batch, batchIndex, totalBatches, totalImages) {
+        window.logger?.warn(`批次 ${batchIndex + 1} 批量生成失败，回退到逐个生成`);
+        const signedUrls = [];
+        
+        for (let i = 0; i < batch.length; i++) {
+            const imageConfig = batch[i];
+            try {
+                let signedUrl = imageConfig.url;
+                
+                if (window.CDN_CONFIG.cos.useBackendApi && window.cosApiUtils) {
+                    signedUrl = await window.cosApiUtils.getSignedUrl(imageConfig.url);
+                } else if (window.cosUtils) {
+                    signedUrl = await window.cosUtils.getSignedUrl(imageConfig.url);
+                }
+                
+                signedUrls.push(signedUrl);
+            } catch (error) {
+                window.logger?.error(`逐个生成签名URL失败: ${imageConfig.filename}`, error);
+                signedUrls.push(imageConfig.url); // 失败时使用原始URL
+            }
+        }
+        
+        return signedUrls;
+    }
+
+    /**
+     * 更新加载进度显示
+     * @param {number} percentage - 进度百分比 (0-100)
+     * @param {string} stage - 当前阶段描述
+     * @param {number} current - 当前处理的图片数量
+     * @param {number} total - 总图片数量
+     */
+    updateLoadingProgress(percentage, stage, current = 0, total = 0) {
+        const progressContainer = this.imageGrid.querySelector('.loading-progress-container');
+        if (!progressContainer) return;
+        
+        const progressBarFill = progressContainer.querySelector('.progress-bar-fill');
+        const progressPercentage = progressContainer.querySelector('.progress-percentage');
+        const progressStage = progressContainer.querySelector('.progress-stage');
+        const progressCount = progressContainer.querySelector('.progress-count');
+        
+        if (progressBarFill) {
+            progressBarFill.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
+        }
+        
+        if (progressPercentage) {
+            progressPercentage.textContent = `${Math.round(percentage)}%`;
+        }
+        
+        if (progressStage) {
+            progressStage.textContent = stage;
+        }
+        
+        if (progressCount) {
+            if (total > 0) {
+                progressCount.textContent = `${current}/${total} 张图片`;
+            } else {
+                progressCount.textContent = '';
+            }
+        }
+    }
+
+    async loadAvailableImages() {
+        // 初始化进度条
+        this.imageGrid.innerHTML = `
+            <div class="loading-progress-container">
+                <div class="progress-bar-wrapper">
+                    <div class="progress-bar-fill" style="width: 0%"></div>
+                </div>
+                <div class="progress-info">
+                    <span class="progress-percentage">0%</span>
+                    <span class="progress-stage">正在初始化...</span>
+                    <span class="progress-count">0/0 张图片</span>
+                </div>
+            </div>
+        `;
+        
+        try {
+            // 阶段1: 获取图片列表 (0-10%)
+            this.updateLoadingProgress(0, '正在获取图片列表...', 0, 0);
+            const imageList = await this.loadImagesFromAutoScan();
+            const totalImages = imageList.length;
+            this.updateLoadingProgress(10, '图片列表获取完成', totalImages, totalImages);
+            
+            if (totalImages === 0) {
+                this.imageGrid.innerHTML = '<p class="loading-text">未找到图片，请检查COS配置</p>';
+                return;
+            }
+            
+            // 阶段2: 生成签名URL (10-50%) - 使用分批批量处理
+            this.updateLoadingProgress(10, '正在生成访问密钥...', 0, totalImages);
+            
+            // 批次大小配置（每批处理50张图片）
+            const BATCH_SIZE = 50;
+            const processedConfigs = [];
+            
+            // 如果启用了COS签名访问，使用批量API
+            if (window.CDN_CONFIG.cos && window.CDN_CONFIG.cos.useSignature) {
+                // 分批处理图片列表
+                const batches = [];
+                for (let i = 0; i < imageList.length; i += BATCH_SIZE) {
+                    batches.push(imageList.slice(i, i + BATCH_SIZE));
+                }
+                
+                const totalBatches = batches.length;
+                
+                // 逐批处理
+                for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+                    const batch = batches[batchIndex];
+                    const batchStartIndex = batchIndex * BATCH_SIZE;
                     
-                    const imageUrl = imageConfig.url;
-                    const imageData = imageUrl; // 直接使用URL，不转换为base64
+                    try {
+                        // 更新进度：显示当前批次
+                        const batchProgress = 10 + (batchIndex / totalBatches) * 40;
+                        this.updateLoadingProgress(
+                            batchProgress,
+                            `正在生成访问密钥... (第 ${batchIndex + 1}/${totalBatches} 批)`,
+                            batchStartIndex,
+                            totalImages
+                        );
+                        
+                        // 收集当前批次的所有URL
+                        const batchUrls = batch.map(img => {
+                            if (!img.url || img.url.trim() === '') {
+                                throw new Error('图片URL未配置');
+                            }
+                            return img.url;
+                        });
+                        
+                        // 批量获取签名URL
+                        let signedUrls = [];
+                        if (window.CDN_CONFIG.cos.useBackendApi && window.cosApiUtils) {
+                            // 使用后端批量API（推荐，密钥不暴露）
+                            try {
+                                signedUrls = await window.cosApiUtils.getSignedUrls(batchUrls);
+                                window.logger?.log(`批次 ${batchIndex + 1} 签名URL批量生成成功，共 ${signedUrls.length} 个`);
+                            } catch (error) {
+                                window.logger?.error(`批次 ${batchIndex + 1} 批量生成签名URL失败:`, error);
+                                // 如果批量失败，回退到逐个生成
+                                signedUrls = await this.fallbackToIndividualSigning(batch, batchIndex, totalBatches, totalImages);
+                            }
+                        } else if (window.cosUtils) {
+                            // 使用前端SDK批量生成（密钥会暴露，不推荐）
+                            try {
+                                signedUrls = await window.cosUtils.getSignedUrls(batchUrls);
+                                window.logger?.log(`批次 ${batchIndex + 1} 签名URL批量生成成功，共 ${signedUrls.length} 个`);
+                            } catch (error) {
+                                window.logger?.error(`批次 ${batchIndex + 1} 批量生成签名URL失败:`, error);
+                                // 如果批量失败，回退到逐个生成
+                                signedUrls = await this.fallbackToIndividualSigning(batch, batchIndex, totalBatches, totalImages);
+                            }
+                        } else {
+                            // 没有可用的签名服务，使用原始URL
+                            signedUrls = batchUrls;
+                        }
+                        
+                        // 将签名URL与图片配置匹配
+                        for (let i = 0; i < batch.length; i++) {
+                            const imageConfig = batch[i];
+                            const signedUrl = signedUrls[i] || imageConfig.url;
+                            
+                            processedConfigs.push({
+                                ...imageConfig,
+                                signedUrl: signedUrl
+                            });
+                        }
+                        
+                        // 更新进度：批次完成
+                        const batchCompleteProgress = 10 + ((batchIndex + 1) / totalBatches) * 40;
+                        this.updateLoadingProgress(
+                            batchCompleteProgress,
+                            `正在生成访问密钥... (第 ${batchIndex + 1}/${totalBatches} 批完成)`,
+                            Math.min(batchStartIndex + batch.length, totalImages),
+                            totalImages
+                        );
+                    } catch (error) {
+                        window.logger?.error(`处理批次 ${batchIndex + 1} 时出错:`, error);
+                        // 批次失败，使用原始URL继续
+                        for (const imageConfig of batch) {
+                            processedConfigs.push({
+                                ...imageConfig,
+                                signedUrl: imageConfig.url || '',
+                                error: error.message
+                            });
+                        }
+                        // 更新进度
+                        const batchCompleteProgress = 10 + ((batchIndex + 1) / totalBatches) * 40;
+                        this.updateLoadingProgress(
+                            batchCompleteProgress,
+                            `正在生成访问密钥... (第 ${batchIndex + 1}/${totalBatches} 批完成)`,
+                            Math.min(batchStartIndex + batch.length, totalImages),
+                            totalImages
+                        );
+                    }
+                }
+            } else {
+                // 未启用签名访问，直接使用原始URL
+                for (const imageConfig of imageList) {
+                    processedConfigs.push({
+                        ...imageConfig,
+                        signedUrl: imageConfig.url || ''
+                    });
+                }
+                this.updateLoadingProgress(50, '跳过签名URL生成', totalImages, totalImages);
+            }
+            
+            // 阶段3: 加载图片 (50-100%)
+            this.updateLoadingProgress(50, '正在加载图片...', 0, totalImages);
+            
+            const loadPromises = processedConfigs.map(async (config, index) => {
+                try {
+                    const imageData = config.signedUrl || config.url;
+                    
+                    // 更新进度：50% + (index+1)/total * 50%
+                    const loadProgress = 50 + ((index + 1) / totalImages) * 50;
+                    this.updateLoadingProgress(
+                        loadProgress,
+                        '正在加载图片...',
+                        index + 1,
+                        totalImages
+                    );
                     
                     return {
-                        name: imageConfig.filename,
-                        displayName: imageConfig.name,
-                        url: imageUrl,
+                        name: config.filename,
+                        displayName: config.name || config.filename,
+                        url: config.signedUrl || config.url,
                         data: imageData,
-                        config: imageConfig,
+                        config: config,
                         loaded: true
                     };
                 } catch (error) {
-                    console.error(`加载图片失败: ${imageConfig.filename}`, error);
+                    window.logger?.error(`加载图片失败: ${config.filename}`, error);
                     return {
-                        name: imageConfig.filename,
-                        displayName: imageConfig.name,
-                        url: imageConfig.url || '',
+                        name: config.filename,
+                        displayName: config.name || config.filename,
+                        url: config.url || '',
                         data: null,
-                        config: imageConfig,
+                        config: config,
                         loaded: false,
-                        error: error.message
+                        error: error.message || config.error
                     };
                 }
             });
 
             this.availableImages = await Promise.all(loadPromises);
+            
+            // 加载完成
+            this.updateLoadingProgress(100, '加载完成', totalImages, totalImages);
+            
+            // 短暂延迟后渲染图片网格，让用户看到100%完成
+            await new Promise(resolve => setTimeout(resolve, 300));
             this.renderImageGrid();
         } catch (error) {
-            console.error('加载图片配置时出错：', error);
-            this.imageGrid.innerHTML = '<p class="loading-text">图片配置加载失败，请检查CDN配置和网络连接</p>';
+            window.logger?.error('加载图片配置时出错：', error);
+            this.imageGrid.innerHTML = '<p class="loading-text">图片配置加载失败，请检查COS配置和网络连接</p>';
         }
+    }
+
+    /**
+     * 自动扫描COS目录获取图片列表
+     */
+    async loadImagesFromAutoScan() {
+        const autoScan = window.CDN_CONFIG.autoScan;
+        const config = window.CDN_CONFIG;
+        
+        // 更新进度：正在获取图片列表
+        this.updateLoadingProgress(5, '正在连接服务器获取图片列表...', 0, 0);
+        
+        let cosImages = [];
+        
+        // 根据配置选择使用后端API或前端SDK
+        if (config.cos?.useBackendApi && window.cosApiUtils) {
+            // 使用后端API（推荐，密钥不暴露）
+            window.logger?.log('开始自动扫描COS目录（使用后端API）:', autoScan.prefix);
+            this.updateLoadingProgress(7, '正在从服务器获取图片列表...', 0, 0);
+            cosImages = await window.cosApiUtils.listImages(autoScan.prefix);
+        } else if (window.cosUtils && window.cosUtils.cos) {
+            // 使用前端SDK（密钥会暴露，不推荐）
+            window.logger?.log('开始自动扫描COS目录（使用前端SDK）:', autoScan.prefix);
+            this.updateLoadingProgress(7, '正在从服务器获取图片列表...', 0, 0);
+            cosImages = await window.cosUtils.listImages(autoScan.prefix);
+        } else {
+            throw new Error('COS服务未初始化，无法自动扫描');
+        }
+        
+        // 2. 加载名称映射文件（如果配置了）
+        let nameMapping = {};
+        if (autoScan.nameMappingPath) {
+            try {
+                let mappingUrl = window.CDN_CONFIG.baseUrl + autoScan.nameMappingPath;
+                
+                // 如果启用了COS签名访问，生成签名URL
+                if (window.CDN_CONFIG.cos && window.CDN_CONFIG.cos.useSignature) {
+                    try {
+                        // 根据配置选择使用后端API或前端SDK
+                        if (window.CDN_CONFIG.cos.useBackendApi && window.cosApiUtils) {
+                            mappingUrl = await window.cosApiUtils.getSignedUrl(mappingUrl);
+                        } else if (window.cosUtils) {
+                            mappingUrl = await window.cosUtils.getSignedUrl(mappingUrl);
+                        }
+                    } catch (error) {
+                        window.logger?.warn('生成名称映射文件签名URL失败:', error);
+                    }
+                }
+                
+                const mappingResponse = await fetch(mappingUrl);
+                if (mappingResponse.ok) {
+                    const mappingData = await mappingResponse.json();
+                    nameMapping = mappingData.mappings || {};
+                    window.logger?.log('名称映射文件加载成功，共', Object.keys(nameMapping).length, '条映射');
+                } else {
+                    window.logger?.warn('名称映射文件不存在或无法访问，将使用文件名作为显示名称');
+                }
+            } catch (error) {
+                window.logger?.warn('加载名称映射文件失败，将使用文件名作为显示名称:', error);
+            }
+        }
+        
+        // 3. 构建图片列表
+        const imageList = cosImages.map(image => {
+            // 使用映射文件中的显示名称，如果没有则使用文件名
+            const displayName = nameMapping[image.filename] || image.filename;
+            
+            return {
+                name: displayName,
+                filename: image.filename,
+                url: image.url
+            };
+        });
+        
+        window.logger?.log(`自动扫描完成，共找到 ${imageList.length} 张图片`);
+        return imageList;
     }
 
 
@@ -314,27 +672,95 @@ class PaginatedCoffeeCardEditor {
         return filename;
     }
 
+    normalizeSearchKeyword(value) {
+        return (value || '').toString().trim().toLowerCase().replace(/\s+/g, '');
+    }
+
+    getPinyinInitials(text) {
+        const source = (text || '').toString();
+        const letterMap = 'ABCDEFGHJKLMNOPQRSTWXYZ';
+        const boundaryMap = '阿八嚓哒妸发旮哈讥咔垃妈拿哦啪期然撒塌穵昔压匝';
+        let initials = '';
+
+        for (const char of source) {
+            if (/^[a-z0-9]$/i.test(char)) {
+                initials += char.toLowerCase();
+                continue;
+            }
+
+            if (/^[\u4e00-\u9fff]$/.test(char)) {
+                let letter = '';
+                for (let i = boundaryMap.length - 1; i >= 0; i--) {
+                    if (char.localeCompare(boundaryMap[i], 'zh-CN') >= 0) {
+                        letter = letterMap[i];
+                        break;
+                    }
+                }
+                if (letter) {
+                    initials += letter.toLowerCase();
+                }
+            }
+        }
+
+        return initials;
+    }
+
+    getFilteredImages() {
+        const keyword = this.normalizeSearchKeyword(this.searchKeyword);
+
+        const derivedList = this.availableImages.map((image, originalIndex) => {
+            const displayName = this.getDisplayName(image.name);
+            const normalizedName = this.normalizeSearchKeyword(displayName);
+            const pinyinInitials = this.getPinyinInitials(displayName);
+
+            return {
+                image,
+                originalIndex,
+                displayName,
+                normalizedName,
+                pinyinInitials
+            };
+        });
+
+        return !keyword
+            ? derivedList
+            : derivedList.filter(item => (
+                item.normalizedName.includes(keyword) ||
+                item.pinyinInitials.includes(keyword)
+            ));
+    }
+
 
     renderImageGrid() {
         this.imageGrid.innerHTML = '';
-        
-        this.availableImages.forEach((image, index) => {
+        const displayImages = this.getFilteredImages();
+
+        if (displayImages.length === 0) {
+            this.imageGrid.innerHTML = '<p class="loading-text">未找到匹配名片</p>';
+            return;
+        }
+
+        displayImages.forEach(({ image, originalIndex, displayName }) => {
             const imageItem = document.createElement('div');
             imageItem.className = 'image-item';
-            imageItem.dataset.index = index;
+            imageItem.dataset.index = originalIndex;
+            const isSelected = this.selectedImages.some(item => item.index === originalIndex);
+            if (isSelected) {
+                imageItem.classList.add('selected');
+            }
             
             if (image.loaded) {
                 imageItem.innerHTML = `
                     <div class="checkbox">✓</div>
-                    <img src="${image.data}" alt="${this.getDisplayName(image.name)}">
-                    <div class="image-name">${this.getDisplayName(image.name)}</div>
+                    <img src="${image.data}" alt="${displayName}">
+                    <div class="image-name">${displayName}</div>
                 `;
                 
-                imageItem.addEventListener('click', () => this.toggleImageSelection(index));
+                imageItem.addEventListener('click', () => this.toggleImageSelection(originalIndex));
             } else {
                 imageItem.innerHTML = `
                     <div class="image-name" style="padding: 40px; color: #ef4444;">
-                        ${this.getDisplayName(image.name)}<br>
+                        ${displayName}<br>
                         <small>加载失败</small>
                     </div>
                 `;
@@ -348,20 +774,18 @@ class PaginatedCoffeeCardEditor {
     toggleImageSelection(index) {
         const image = this.availableImages[index];
         if (!image.loaded) return;
-        
-        const imageItem = this.imageGrid.children[index];
+
         const existingSelection = this.selectedImages.find(item => item.index === index);
         
         if (existingSelection) {
             // 取消选择
             this.selectedImages = this.selectedImages.filter(item => item.index !== index);
-            imageItem.classList.remove('selected');
         } else {
             // 选择
             this.selectedImages.push({ index, quantity: 1 });
-            imageItem.classList.add('selected');
         }
-        
+
+        this.renderImageGrid();
         this.updateStep1Buttons();
     }
 
@@ -590,7 +1014,7 @@ class PaginatedCoffeeCardEditor {
                     previewItem.addEventListener('click', () => this.showImageModal(canvas.toDataURL('image/png', 1.0), `${this.getDisplayName(image.name)} - 第${copyIndex + 1}张`));
                 };
                 img.onerror = () => {
-                    console.error('预览图片加载失败:', image.url);
+                    window.logger?.error('预览图片加载失败:', image.url);
                     previewItem.innerHTML = `
                         <div style="padding: 40px; color: #ef4444; text-align: center;">
                             <div>${this.getDisplayName(image.name)}</div>
@@ -818,7 +1242,7 @@ class PaginatedCoffeeCardEditor {
             alert(`PDF生成完成！共 ${totalCards} 张名片，${Math.ceil(totalCards / 8)} 页`);
             
         } catch (error) {
-            console.error('生成PDF时出错：', error);
+            window.logger?.error('生成PDF时出错：', error);
             alert('生成PDF时出错，请重试！');
             this.generatePdf.disabled = false;
             this.generatePdf.textContent = '生成PDF';
@@ -989,23 +1413,15 @@ class PaginatedCoffeeCardEditor {
             });
             
             if (response.ok) {
-                console.log('Log文件已保存到服务器:', logFilename);
+                window.logger?.log('Log文件已保存到服务器:', logFilename);
             } else {
-                console.error('保存log文件到服务器失败:', response.statusText);
-                // 如果服务器保存失败，则下载到本地作为备份
-                this.downloadLogFile(logContent, logFilename);
+                window.logger?.error('保存log文件到服务器失败:', response.statusText);
+                // log文件只需要保存到服务器，不需要下载到本地
             }
             
         } catch (error) {
-            console.error('保存log文件时出错:', error);
-            // 如果网络错误，则下载到本地作为备份
-            const logContent = this.formatLogContent(this.generateLogData(pdfFilename));
-            const today = new Date();
-            const year = today.getFullYear();
-            const month = String(today.getMonth() + 1).padStart(2, '0');
-            const day = String(today.getDate()).padStart(2, '0');
-            const logFilename = `${year}-${month}-${day}.log`;
-            this.downloadLogFile(logContent, logFilename);
+            window.logger?.error('保存log文件时出错:', error);
+            // log文件只需要保存到服务器，不需要下载到本地
         }
     }
 
@@ -1030,7 +1446,7 @@ class PaginatedCoffeeCardEditor {
                 return `${year}-${month}-${day}-01.${extension}`;
             }
         } catch (error) {
-            console.error('生成文件名时出错:', error);
+            window.logger?.error('生成文件名时出错:', error);
             // 出错时返回默认文件名
             const today = new Date();
             const year = today.getFullYear();
@@ -1047,7 +1463,7 @@ class PaginatedCoffeeCardEditor {
             return logFilename;
             
         } catch (error) {
-            console.error('生成log文件名时出错:', error);
+            window.logger?.error('生成log文件名时出错:', error);
             // 出错时返回默认文件名
             const today = new Date();
             const year = today.getFullYear();
@@ -1072,10 +1488,10 @@ class PaginatedCoffeeCardEditor {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            console.log('Log文件已下载到本地:', logFilename);
+            window.logger?.log('Log文件已下载到本地:', logFilename);
             
         } catch (error) {
-            console.error('下载log文件时出错:', error);
+            window.logger?.error('下载log文件时出错:', error);
         }
     }
 
@@ -1206,9 +1622,9 @@ class PaginatedCoffeeCardEditor {
                 window.gc();
             }
             
-            console.log('缓存清理完成');
+            window.logger?.log('缓存清理完成');
         } catch (error) {
-            console.warn('缓存清理时出现错误:', error);
+            window.logger?.warn('缓存清理时出现错误:', error);
         }
     }
 
