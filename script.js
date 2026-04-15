@@ -1331,7 +1331,7 @@ class PaginatedCoffeeCardEditor {
 
     addCuttingLines(pdf, pageWidth, pageHeight, cardWidth, cardHeight) {
         // 设置线条样式
-        pdf.setDrawColor(0, 0, 0); // 黑色
+        pdf.setDrawColor(255, 255, 255); // 黑色
         pdf.setLineWidth(0.25); // 2px线宽
         
         // 获取PDF总页数

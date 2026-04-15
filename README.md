@@ -44,7 +44,7 @@
 
 | 功能模块 | 描述 | 特性 |
 |---------|------|------|
-| 🖼️ **图片管理** | 动态图片加载与管理 | 支持JPG/PNG/GIF/BMP/WebP，自动扫描`img/`文件夹 |
+| 🖼️ **图片管理** | 动态图片加载与管理 | 从腾讯云 COS 自动扫描列表，支持常见图片格式 |
 | 📝 **文字编辑** | 灵活的文本编辑系统 | 日历控件、自动格式化、全局/单独设定 |
 | 👁️ **预览系统** | 高精度预览功能 | 1:1精确预览、点击放大、独立副本预览 |
 | 🔤 **字体管理** | 智能字体加载系统 | OPPO Sans 4.0、进度显示、优雅降级 |
@@ -91,10 +91,17 @@ npm run dev
 ### 生产构建
 
 ```bash
-# 运行打包脚本
-./打包.bat
-# 或手动打包
+# 仅前端 Parcel 打包到 dist/（不含服务端与零散 JS）
 npm run build
+
+# 推荐：清空缓存与 dist → Parcel 打包 → 复制 server、config、logger 等到 dist/
+npm run build:prod
+
+# 不经过 Parcel、保留独立 .js 文件时再打服务端包
+npm run build:prod:static
+
+# 仅删除 dist 与 .parcel-cache
+npm run clean
 ```
 
 ---
@@ -104,18 +111,10 @@ npm run build
 ### 📸 智能图片管理
 
 #### 自动扫描系统
-- **动态加载**：启动时自动扫描`img/`文件夹
-- **格式支持**：JPG、PNG、GIF、BMP、WebP
+- **动态加载**：通过后端或 COS SDK 列出存储桶前缀下的图片
+- **格式支持**：JPG、PNG、GIF、BMP、WebP 等常见格式
 - **智能排序**：数字文件名正确排序（1.jpg, 2.jpg, 10.jpg）
-- **实时更新**：添加图片后刷新即可使用
-
-```
-📁 img/
-├── 🌟 2015陈年曼特宁.png
-├── ☕ 克里夫顿庄园-蓝山一号.png
-├── 🎯 公主病-芸上甜果.png
-└── 💎 翡翠庄园-红标瑰夏.png
-```
+- **实时更新**：COS 上更新对象后刷新页面即可拉取新列表
 
 ### ✏️ 灵活文字编辑
 
@@ -256,7 +255,6 @@ GET /api/logs/:filename
 
 ```
 Coffee-Label-Generator/
-├── 📁 img/                 # 图片资源文件夹
 ├── 📁 log/                 # 日志文件存储
 ├── 📁 dist/                # 构建输出目录
 ├── 📁 md/                  # 文档说明文件
@@ -264,7 +262,8 @@ Coffee-Label-Generator/
 ├── 📄 script.js            # 核心逻辑
 ├── 📄 style.css            # 样式文件
 ├── 📄 server.js            # 服务器入口
-├── 📄 font-loader.js       # 字体加载模块
+├── 📄 server-cos.js        # COS 签名与列表 API
+├── 📄 config.js            # 前端 CDN / COS 行为配置
 └── 📄 package.json         # 项目配置
 ```
 
@@ -277,14 +276,14 @@ Coffee-Label-Generator/
    ```
 
 2. **功能开发**
-   - 前端：修改`script.js`、`style.css`
-   - 后端：修改`server.js`
-   - 字体：调整`font-loader.js`
+   - 前端：修改`script.js`、`style.css`、`config.js`
+   - 后端：修改`server.js`、`server-cos.js`
+   - 密钥：本地使用`.env`（参考`.env.example`），勿提交仓库
 
 3. **测试验证**
-   - 访问`test-font-loading.html`测试字体加载
+   - 检查 COS 列表与签名是否正常
    - 检查日志文件生成
-   - 验证PDF输出质量
+   - 验证 PDF 输出质量
 
 ### 调试技巧
 
@@ -340,9 +339,9 @@ const debugPDF = true;
 
 详细步骤请参考：[宝塔部署详细指南](md/宝塔部署详细指南.md)
 
-### CDN加速
+### 腾讯云 COS
 
-配置说明请参考：[CDN部署说明](md/CDN部署说明.md)
+图片与名称映射放在 COS/CDN 上；前端见 `config.js`（`baseUrl`、`autoScan` 等），服务端密钥见 `.env.example` 与 `server-cos.js`。
 
 ---
 
@@ -350,7 +349,7 @@ const debugPDF = true;
 
 ### 🔧 系统要求
 
-- **图片文件夹**：确保`img/`文件夹存在且包含图片文件
+- **COS 与配置**：确保 `config.js` 与 `.env`（或部署环境变量）与存储桶一致，图片在 COS 上可读
 - **日志目录**：系统会自动创建`log/`文件夹
 - **浏览器兼容**：建议使用Chrome 80+、Firefox 75+、Safari 13+
 

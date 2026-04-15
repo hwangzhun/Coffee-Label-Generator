@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 
 console.log('🚀 开始打包咖啡名片编辑器...\n');
 
@@ -14,22 +13,28 @@ if (fs.existsSync(packageDir)) {
 console.log('📁 创建打包目录...');
 fs.mkdirSync(packageDir, { recursive: true });
 
-// 需要复制的文件列表
+// 需要复制的文件列表（图片在 COS，不在仓库 img/）
 const filesToCopy = [
     'index.html',
-    'style.css', 
+    'style.css',
     'script.js',
     'server.js',
+    'server-cos.js',
     'package.json',
+    'package-lock.json',
     'config.js',
-    'font-loader.js',
-    'icon.svg'
+    'config.local.js',
+    'logger.js',
+    'cos-api-utils.js',
+    'cos-utils.js',
+    'icon.svg',
+    'name-mapping.json',
+    '.env.example'
 ];
 
-// 需要复制的文件夹
-const foldersToCopy = [
-    // 不再需要复制img文件夹，现在完全依赖CDN
-];
+const foldersToCopy = [];
+
+const rootPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 
 console.log('📄 复制文件...');
 filesToCopy.forEach(file => {
@@ -56,7 +61,7 @@ const deployInstructions = `# 咖啡名片编辑器 - 部署说明
 
 ## 📦 打包信息
 - 打包时间: ${new Date().toLocaleString('zh-CN')}
-- 版本: 1.0.0
+- 版本: ${rootPkg.version}
 - 包含文件: ${filesToCopy.join(', ')}
 
 ## 🚀 宝塔面板部署步骤
@@ -111,29 +116,30 @@ const deployInstructions = `# 咖啡名片编辑器 - 部署说明
 ├── index.html          # 主页面
 ├── style.css           # 样式文件
 ├── script.js           # 前端逻辑
-├── server.js           # 后端服务器
+├── server.js           # 后端入口
+├── server-cos.js       # COS 签名与列表 API
 ├── package.json        # 项目配置
-├── config.js           # CDN配置文件
-├── README.md           # 说明文档
+├── config.js           # 前端 COS/CDN 行为配置
+├── config.local.js     # 本地可选覆盖（密钥等勿提交）
+├── logger.js / cos-*.js
+├── .env                # 服务端密钥（由 .env.example 复制，勿提交）
 └── log/                # 日志文件夹 (自动创建)
 \`\`\`
 
-## 🌐 CDN配置要求
-- 系统完全依赖CDN获取图片
-- 需要配置正确的CDN地址在 config.js 中
-- 确保CDN服务可用且支持跨域访问
+## 🌐 腾讯云 COS
+- 图片与名称映射在存储桶/CDN；前端 \`config.js\` 配置 \`baseUrl\`、\`autoScan\` 等
+- 服务端复制 \`.env.example\` 为 \`.env\` 并填写 COS_SECRET_ID / COS_SECRET_KEY 等
 
 ## ⚠️ 注意事项
 1. 确保服务器端口3000未被占用
-2. 确保CDN服务可用且网络连接正常
-3. 建议配置SSL证书以使用HTTPS
-4. 定期备份log文件夹中的日志文件
+2. 确保 COS 与 \`config.js\`、\`.env\` 中桶与地域一致
+3. 建议配置 SSL
+4. 定期备份 log 目录
 
 ## 🆘 故障排除
-- 如果无法访问，检查防火墙设置
-- 如果图片无法加载，检查CDN配置和网络连接
-- 如果PDF生成失败，检查Node.js版本
-- 如果CDN不可用，检查config.js中的CDN地址配置
+- 无法访问：防火墙、端口、PM2 状态
+- 图片列表为空：COS 权限、前缀、后端 \`/api/cos\` 是否正常
+- PDF 失败：浏览器控制台、图片跨域与 CORS
 `;
 
 fs.writeFileSync(path.join(packageDir, 'DEPLOY.md'), deployInstructions);
@@ -176,27 +182,20 @@ pause
 fs.writeFileSync(path.join(packageDir, 'start.bat'), startBat);
 console.log('  ✅ start.bat (Windows启动脚本)');
 
-// 创建package.json的简化版本
-const simplePackageJson = {
-    "name": "coffee-card-editor",
-    "version": "1.0.0",
-    "description": "咖啡名片批量编辑和PDF生成工具",
-    "main": "server.js",
-    "scripts": {
-        "start": "node server.js",
-        "dev": "nodemon server.js"
-    },
-    "dependencies": {
-        "express": "^4.18.2",
-        "cors": "^2.8.5"
-    },
-    "keywords": ["coffee", "card", "pdf", "editor"],
-    "author": "Coffee Card Editor",
-    "license": "MIT"
+const prodPackageJson = {
+    name: rootPkg.name,
+    version: rootPkg.version,
+    description: rootPkg.description,
+    main: 'server.js',
+    scripts: { start: 'node server.js' },
+    dependencies: rootPkg.dependencies,
+    keywords: rootPkg.keywords,
+    author: rootPkg.author,
+    license: rootPkg.license
 };
 
-fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify(simplePackageJson, null, 2));
-console.log('  ✅ package.json (简化版本)');
+fs.writeFileSync(path.join(packageDir, 'package.json'), JSON.stringify(prodPackageJson, null, 2));
+console.log('  ✅ package.json (生产依赖，已去掉 devDependencies)');
 
 console.log('\n🎉 打包完成！');
 console.log(`📦 打包目录: ${packageDir}/`);

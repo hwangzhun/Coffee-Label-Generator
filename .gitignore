@@ -1,0 +1,31 @@
+# 依赖
+node_modules/
+
+# Parcel 构建与缓存
+dist/
+.parcel-cache/
+
+# node package.js / package-simple.js 输出目录
+coffee-card-editor-package/
+coffee-editor/
+
+# 环境变量（含密钥，勿提交）
+.env
+.env.local
+.env.*.local
+
+# 运行时日志目录（由 server 按需创建）
+log/
+
+# npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 编辑器（按需取消注释）
+# .vscode/
+# .idea/
